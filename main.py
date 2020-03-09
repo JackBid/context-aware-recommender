@@ -1,5 +1,12 @@
 import numpy as np
 import pandas as pd 
 
-d = pd.read_csv('res/listening_data.txt', sep='\t', names=['twitter-id', 'user-id', 'month', 'weekday', 'longitude', 'latitude', 'country-id', 'city-id', 'artist-id', 'track-id'])
-print(d.head())
+user = '73BED0524191DFB94AB901D12413517F'
+item = 93593
+
+df = pd.read_csv('res/data.csv')
+
+item_rating_matrix = pd.pivot_table(df, index='ItemID', columns='UserID', values='Rating')
+
+print(item_rating_matrix.loc[item][user])
+
