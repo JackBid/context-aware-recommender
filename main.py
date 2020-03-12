@@ -4,8 +4,8 @@ import pandas as pd
 import operator
 import random
 
-user = '73BED0524191DFB94AB901D12413517F'
-item = 93593
+user = '003BC319571635C677EEFC610BD066F5'
+item = 81126 
 item2 = 100507
 
 
@@ -32,37 +32,57 @@ def preProcessData(rawData):
 
     return result
 
-def findSimilarItems(item, ratings_mean_count):
-
+def findSimilarItems(item):
     item_series = user_item_matrix[item]
     similar_items = user_item_matrix.corrwith(item_series, method='pearson')
 
     corr_similar_items = pd.DataFrame(similar_items, columns=['Correlation'])
     corr_similar_items.dropna(inplace=True)
-    #corr_similar_items = corr_similar_items.sort_values('Correlation', ascending=False).head()
     corr_similar_items = corr_similar_items.join(ratings_mean_count['RatingCount'])
-    corr_similar_items = corr_similar_items[corr_similar_items['RatingCount']>10].sort_values('Correlation', ascending=False).head()
-    #corr_forrest_gump[corr_forrest_gump ['rating_counts']>50].sort_values('Correlation', ascending=False).head()
+    corr_similar_items = corr_similar_items.join(context['TripType'])
+    corr_similar_items = corr_similar_items[corr_similar_items['RatingCount']>10].sort_values('Correlation', ascending=False)
+
+    item_context = corr_similar_items.loc[item]['TripType']
+
+    num_same_context_items = len(corr_similar_items[corr_similar_items['TripType'] == item_context])
+    num_similar_items = len(corr_similar_items['Correlation'])
+
+    corr_similar_items['Correlation'] = corr_similar_items['Correlation'] * (num_same_context_items / num_similar_items)
+
+    return corr_similar_items.head(6)
+
+def recommendItems(user):
+    top_user_items = user_item_matrix.loc[user].sort_values(ascending=False).head(5)
     
-    return corr_similar_items 
+    recs = 0
+    first = True
+
+    for index, value in top_user_items.items():
+        if first:
+            recs = findSimilarItems(index).drop(index)
+            first = False
+        else:
+            recs = pd.concat([recs, findSimilarItems(index).drop(index)], ignore_index=False, sort=True)
+
+    recs = recs.sort_values('Correlation', ascending=False).head(10)
+
+    return recs
+
+#def postFiltering(recs):
+
 
 rawData = readData()
 user_item_matrix = preProcessData(rawData)
 
 ratings_mean_count = pd.DataFrame(rawData.groupby('ItemID')['Rating'].count().sort_values(ascending=False))
 ratings_mean_count = ratings_mean_count.rename(columns = {'ItemID': 'ItemID', 'Rating':'RatingCount'})
+context = pd.DataFrame(rawData.groupby('ItemID')['TripType'].agg(lambda x:x.value_counts().index[0]))
 
-users = findSimilarItems(878115, ratings_mean_count)
-print(users)
+#findSimilarItems(item)
 
-'''
-similarity_matrix = {}
+recs = recommendItems(user)
 
-s = findSimilarItems(user_item_matrix.iloc[0])
-s.sort(key=operator.itemgetter(1), reverse=True)
-s = s[:10]
-print(s)
-'''
+print(recs)
 
 
 
