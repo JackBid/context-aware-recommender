@@ -1,14 +1,16 @@
 import math
-import numpy as np
-import pandas as pd 
 import operator
 import random
+
+import numpy as np
+import pandas as pd 
+from sklearn.metrics.pairwise import cosine_similarity
 
 user = '003BC319571635C677EEFC610BD066F5'
 item = 81126 
 item2 = 100507
 
-
+# Read the data from the file
 def readData():
     n = 14176 #number of records in file
     s = 14176 #desired sample size
@@ -19,6 +21,7 @@ def readData():
         skip.remove(0)
     return pd.read_csv(filename, skiprows=skip)
 
+# Process data so that ratings are adjusted by subtracting mean
 def preProcessData(rawData):
     mean = rawData.groupby(['UserID'], as_index=False, sort=False).mean().rename(columns={'UserID':'UserID', 'Rating':'Rating_mean'})
 
@@ -32,57 +35,101 @@ def preProcessData(rawData):
 
     return result
 
-def findSimilarItems(item):
-    item_series = user_item_matrix[item]
-    similar_items = user_item_matrix.corrwith(item_series, method='pearson')
+def get_user_similar_items(user1, user2):
 
-    corr_similar_items = pd.DataFrame(similar_items, columns=['Correlation'])
-    corr_similar_items.dropna(inplace=True)
-    corr_similar_items = corr_similar_items.join(ratings_mean_count['RatingCount'])
-    corr_similar_items = corr_similar_items.join(context['TripType'])
-    corr_similar_items = corr_similar_items[corr_similar_items['RatingCount']>10].sort_values('Correlation', ascending=False)
+    user1_ratings = rating_norm[rating_norm.UserID == user1]
+    user2_ratings = rating_norm[rating_norm.UserID == user2]
 
-    item_context = corr_similar_items.loc[item]['TripType']
+    common_items = user1_ratings.merge(user2_ratings, on = 'ItemID', how = 'inner')
 
-    num_same_context_items = len(corr_similar_items[corr_similar_items['TripType'] == item_context])
-    num_similar_items = len(corr_similar_items['Correlation'])
+    return common_items.merge(rawData, on = 'ItemID')
 
-    corr_similar_items['Correlation'] = corr_similar_items['Correlation'] * (num_same_context_items / num_similar_items)
+def find_n_neighbours(df,n):
+    order = np.argsort(df.values, axis=1)[:, :n]
+    df = df.apply(lambda x: pd.Series(x.sort_values(ascending=False)
+           .iloc[:n].index, 
+          index=['top{}'.format(i) for i in range(1, n+1)]), axis=1)
+    return df
 
-    return corr_similar_items.head(6)
+# Calculate the contextual probability between users given a trip type
+def contextual_probability(user1, user2, trip_type):
 
-def recommendItems(user):
-    top_user_items = user_item_matrix.loc[user].sort_values(ascending=False).head(5)
+    numberUser2Ratings = len(rawData[rawData['UserID'] == user2])
+    numberUSer2RatingsSameContext = len(rawData[ (rawData['UserID'] == user2) & (rawData['TripType'] == trip_type) ])
+
+    return numberUSer2RatingsSameContext / numberUser2Ratings
+
+# Take the list of the top similar users and reorder based on context
+def filter_similar_users_for_context(user, similarity):
+    similar_users = similarity_30_m.loc[user]
+
+    similarities = []
+    context = []
+    scores = []
+
+    user_context = pd.DataFrame(rawData.groupby('UserID')['TripType'].agg(lambda x:x.value_counts().index[0])).loc[user].get('TripType')
+
+    for index, value in similar_users.iteritems():
+        similarities.append(similarity.at[user, value])
+        context.append(contextual_probability(user, value, user_context))
+
+    similar_users = pd.DataFrame(similar_users)
+    similar_users['similarities'] = similarities
+    similar_users['context'] = context
+
+    similar_users['final_score'] = similar_users['similarities'] * similar_users['context']
+
+    similar_users = similar_users.sort_values(by=['final_score'], ascending=False)
     
-    recs = 0
-    first = True
+    return similar_users
 
-    for index, value in top_user_items.items():
-        if first:
-            recs = findSimilarItems(index).drop(index)
-            first = False
-        else:
-            recs = pd.concat([recs, findSimilarItems(index).drop(index)], ignore_index=False, sort=True)
+def get_items_from_users(users):
 
-    recs = recs.sort_values('Correlation', ascending=False).head(10)
+    itemIDs = []
+    
+    for index, value in users.iteritems():
+        query = rawData[ (rawData['UserID'] ==  value) & (rawData['Rating'] == 5) ]
+        if len(query) > 0:
+            itemIDs.append(query.iloc[0]['ItemID'])
+            itemIDs.append(query.iloc[1]['ItemID'])
+        #itemIDS.append(rawData[ (rawData['UserID'] ==  value) & (rawData['Rating'] == 5) ])
 
-    return recs
-
-#def postFiltering(recs):
+    return itemIDs
 
 
 rawData = readData()
-user_item_matrix = preProcessData(rawData)
 
-ratings_mean_count = pd.DataFrame(rawData.groupby('ItemID')['Rating'].count().sort_values(ascending=False))
-ratings_mean_count = ratings_mean_count.rename(columns = {'ItemID': 'ItemID', 'Rating':'RatingCount'})
-context = pd.DataFrame(rawData.groupby('ItemID')['TripType'].agg(lambda x:x.value_counts().index[0]))
+# Find the mean rating for each user
+mean = rawData.groupby(by='UserID', as_index=False)['Rating'].mean()
 
-#findSimilarItems(item)
+# Calculate normalised rating for each user which is the original rating - the average rating of that user
+rating_norm = pd.merge(rawData, mean, on='UserID')
+rating_norm['rating_norm'] = rating_norm['Rating_x'] - rating_norm['Rating_y']
 
-recs = recommendItems(user)
+# Create user item matrix
+user_item_matrix = pd.pivot_table(rating_norm, index='UserID', columns='ItemID', values='rating_norm')
 
-print(recs)
+# Replace NaN by item average
+final_item = user_item_matrix.fillna(user_item_matrix.mean(axis=0))
+
+# Replace NaN by user average
+final_user = user_item_matrix.apply(lambda row: row.fillna(row.mean()), axis=1)
+
+# Calculate cosine similarity
+cosine = cosine_similarity(final_item)
+np.fill_diagonal(cosine, 0)
+similarity = pd.DataFrame(cosine, index=final_item.index)
+similarity.columns = final_user.index
+
+#Top 30 neighbours for each user
+similarity_30_m = find_n_neighbours(similarity, 30)
+
+def getRecommendations(user):
+    similar_users = filter_similar_users_for_context(user, similarity).reset_index()[user].head()
+    recs = get_items_from_users(similar_users)
+    print(recs)
+
+getRecommendations(user)
 
 
 
