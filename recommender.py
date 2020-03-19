@@ -6,11 +6,12 @@ import numpy as np
 import pandas as pd 
 from sklearn.metrics.pairwise import cosine_similarity
 
-class Recommender():
+class Recommender:
 
     def __init__(self):
         super().__init__()
 
+        self.rawData = self.readData()
         print('Pre processing data...')
         self.preProcessData()
         print('Calculating cosine similarity...')
@@ -82,14 +83,14 @@ class Recommender():
         return itemIDs
 
     def user_item_score(self, user,item):
-        a = similarity_30[similarity_30.index==user].values
+        a = self.similarity_30[self.similarity_30.index==user].values
         b = a.squeeze().tolist()
-        c = final_item.loc[:,item]
+        c = self.final_item.loc[:,item]
         d = c[c.index.isin(b)]
         f = d[d.notnull()]
-        avg_user = mean.loc[mean['UserID'] == user,'Rating'].values[0]
+        avg_user = self.mean.loc[self.mean['UserID'] == user,'Rating'].values[0]
         index = f.index.values.squeeze().tolist()
-        corr = similarity.loc[user,index]
+        corr = self.similarity.loc[user,index]
         fin = pd.concat([f, corr], axis=1)
         fin.columns = ['adg_score','correlation']
         fin['score']=fin.apply(lambda x:x['adg_score'] * x['correlation'],axis=1)
@@ -100,7 +101,6 @@ class Recommender():
 
 
     def preProcessData(self):
-        self.rawData = self.readData()
 
         # Find the mean rating for each user
         self.mean = self.rawData.groupby(by='UserID', as_index=False)['Rating'].mean()
@@ -131,9 +131,12 @@ class Recommender():
     def getRecommendations(self, user):
         similar_users = self.filter_similar_users_for_context(user).reset_index()[user].head()
         recs = self.get_items_from_users(similar_users)
+
+        print('\nRecommended hotel IDs:')
         print(recs)
 
-    def predictRating(user, item):
-        print(user_item_score(user, item))
+    def predictRating(self, user, item):
+        print('\nEstimated rating for ' + user + ' rating ' + str(item) + ':')
+        print(self.user_item_score(user, item))
 
 
