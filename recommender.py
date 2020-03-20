@@ -73,12 +73,8 @@ class Recommender:
         itemIDs = []
         
         for index, value in users.iteritems():
-            query = self.rawData[ (self.rawData['UserID'] ==  value) & (self.rawData['Rating'] == 5) ]
-            if len(query) > 0:
-                itemIDs.append(query.iloc[0]['ItemID'])
-            if len(query) > 1:
-                itemIDs.append(query.iloc[1]['ItemID'])
-            #itemIDS.append(rawData[ (rawData['UserID'] ==  value) & (rawData['Rating'] == 5) ])
+            query = self.rawData[ (self.rawData['UserID'] ==  value) & (self.rawData['Rating'] >= 4) ]
+            itemIDs.extend(list(query['ItemID']))
 
         return itemIDs
 
@@ -129,14 +125,17 @@ class Recommender:
         self.similarity_30 = self.find_n_neighbours(self.similarity, 30)
 
     def getRecommendations(self, user):
-        similar_users = self.filter_similar_users_for_context(user).reset_index()[user].head()
+        similar_users = self.filter_similar_users_for_context(user).reset_index()[user]
         recs = self.get_items_from_users(similar_users)
 
-        print('\nRecommended hotel IDs:')
-        print(recs)
+        #print('\nRecommended hotel IDs:')
+        #print(recs)
+
+        return recs
 
     def predictRating(self, user, item):
-        print('\nEstimated rating for ' + user + ' rating ' + str(item) + ':')
-        print(self.user_item_score(user, item))
+        #print('\nEstimated rating for ' + user + ' rating ' + str(item) + ':')
+        #print(self.user_item_score(user, item))
+        return self.user_item_score(user, item)
 
 
