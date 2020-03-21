@@ -17,16 +17,20 @@ class UI():
     # get recs for an existing user
     def existingUser(self):
         userID = self.io.getUserID()
-        self.recommender.getRecommendations(userID)
+        recs = self.recommender.getRecommendations(userID)
 
-        return
+        print('\nRecommended hotel IDs:')
+        print(recs)
 
     # Get a userId and itemID from the user and find a predicited rating
     def predicitedRating(self):
         userID = self.io.getUserID()
         itemID = self.io.getItemID()
 
-        self.recommender.predictRating(userID, itemID)
+        score = self.recommender.predictRating(userID, itemID)
+
+        print('\nEstimated rating for ' + str(userID) + ' rating ' + str(itemID) + ':')
+        print(score)
 
     # Create a new user id - string of numbers and letters of length 32
     def createNewUserID(self):
@@ -52,9 +56,10 @@ class UI():
         print('Calculating new cosine similarities...')
         self.recommender.cosine_similarity()
 
-        self.recommender.getRecommendations(userID)
+        recs = self.recommender.getRecommendations(userID)
 
-        return
+        print('\nRecommended hotel IDs:')
+        print(recs)
 
     # main menu of options
     def menu(self):

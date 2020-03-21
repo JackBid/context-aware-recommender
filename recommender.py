@@ -127,15 +127,13 @@ class Recommender:
     def getRecommendations(self, user):
         similar_users = self.filter_similar_users_for_context(user).reset_index()[user]
         recs = self.get_items_from_users(similar_users)
-
-        #print('\nRecommended hotel IDs:')
-        #print(recs)
+        
+        if len(recs) > 10:
+            return recs[0:10]
 
         return recs
 
     def predictRating(self, user, item):
-        #print('\nEstimated rating for ' + user + ' rating ' + str(item) + ':')
-        #print(self.user_item_score(user, item))
         return self.user_item_score(user, item)
 
 
